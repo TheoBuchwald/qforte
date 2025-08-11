@@ -114,6 +114,9 @@ class Computer {
     /// return the vector of basis states
     const std::vector<QubitBasis>& get_basis_vec() const { return basis_; };
 
+    /// return the basis states (as indices) and coefficient
+    std::vector<std::pair<int, std::complex<double>>> get_refs();
+
     /// return the coefficient of a basis state
     std::complex<double> coeff(const QubitBasis& basis);
 

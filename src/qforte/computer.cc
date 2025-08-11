@@ -37,6 +37,16 @@ Computer::Computer(int nqubit, double print_threshold)
     coeff_[0] = 1.;
 }
 
+std::vector<std::pair<int, std::complex<double>>> Computer::get_refs() {
+    std::vector<std::pair<int, std::complex<double>>> terms = {};
+    for (size_t i = 0; i < nbasis_; i++) {
+        if (std::abs(coeff_[i]) >= print_threshold_) {
+            terms.push_back(std::make_pair(basis_[i].index(), coeff_[i]));
+        }
+    }
+    return terms;
+}
+
 std::complex<double> Computer::coeff(const QubitBasis& basis) { return coeff_[basis.index()]; }
 
 void Computer::set_state(std::vector<std::pair<QubitBasis, double_c>> state) {
