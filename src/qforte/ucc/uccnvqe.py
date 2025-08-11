@@ -48,12 +48,14 @@ class UCCNVQE(UCCVQE):
         optimizer="BFGS",
         use_analytic_grad=True,
         noise_factor=0.0,
+        remove_redundancies=True,
     ):
         self._opt_thresh = opt_thresh
         self._opt_ftol = opt_ftol
         self._opt_maxiter = opt_maxiter
         self._use_analytic_grad = use_analytic_grad
         self._optimizer = optimizer
+        self._remove_redundancies = remove_redundancies
         if self._use_analytic_grad and self._optimizer in {
             "nelder-mead",
             "powell",
@@ -89,6 +91,11 @@ class UCCNVQE(UCCVQE):
             print(self._pool_obj.str())
 
         self.initialize_ansatz()
+        if getattr(self, "computer", None) is not None:
+            if len(self.computer.get_refs()) > 1:
+                self._excited_dets = []
+                qforte.UCCNPQE.fill_excited_dets(self)
+
 
         if self._verbose:
             print("\nt operators included from pool: \n", self._tops)
@@ -142,6 +149,7 @@ class UCCNVQE(UCCVQE):
 
         print("Use qubit excitations:                   ", self._qubit_excitations)
         print("Use compact excitation circuits:         ", self._compact_excitations)
+        print("Removing redundancies in pool:           ", self._remove_redundancies)
 
         # VQE options.
         opt_thrsh_str = "{:.2e}".format(self._opt_thresh)
