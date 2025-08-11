@@ -84,6 +84,7 @@ class Algorithm(ABC):
 
             self._refprep = build_refprep(self._ref)
             self._Uprep = qf.Circuit(self._refprep)
+            self._nqb = len(self._ref)
 
         elif self._state_prep_type == "unitary_circ":
             if not isinstance(reference, qf.Circuit):
@@ -92,6 +93,7 @@ class Algorithm(ABC):
             self._ref = system.hf_reference
             self._refprep = build_refprep(self._ref)
             self._Uprep = reference
+            self._nqb = len(self._ref)
 
         elif self._state_prep_type == "computer":
             if not isinstance(reference, qf.Computer):
@@ -105,8 +107,7 @@ class Algorithm(ABC):
                     f"Computer needs {len(system.hf_reference)} qubits, found {reference.get_nqubit()}."
                 )
             if (
-                not hasattr(self, "computer_initializable")
-                or not self.computer_initializable
+                not getattr(self, "computer_initializable", False)
             ):
                 raise ValueError("Class cannot be initialized with a computer.")
 
@@ -114,13 +115,13 @@ class Algorithm(ABC):
             self._refprep = build_refprep(self._ref)
             self._Uprep = qf.Circuit()
             self.computer = reference
+            self._nqb = self.computer.get_nqubit()
 
         else:
             raise ValueError(
                 "QForte only supports references as occupation lists, Circuits, or Computers."
             )
 
-        self._nqb = len(self._ref)
         self._qb_ham = system.hamiltonian
         if self._qb_ham.num_qubits() != self._nqb:
             raise ValueError(
@@ -216,10 +217,13 @@ class Algorithm(ABC):
 
     def print_generic_options(self):
         """Print options applicable to any algorithm."""
-        print(
-            "Trial reference state:                   ",
-            ref_string(self._ref, self._nqb),
-        )
+        if getattr(self, "computer", None):
+            print("Computer used:                          ", self.computer)
+        else:
+            print(
+                "Trial reference state:                   ",
+                ref_string(self._ref, self._nqb),
+            )
         print("Number of Hamiltonian Pauli terms:       ", self._Nl)
         print("Trial state preparation method:          ", self._state_prep_type)
         if isinstance(self, Trotterizable):
@@ -292,11 +296,24 @@ class AnsatzAlgorithm(Algorithm):
 
         if self._pool_type in {"sa_SD", "GSD", "SD", "SDT", "SDTQ", "SDTQP", "SDTQPH"}:
             self._pool_obj = qf.SQOpPool()
-            if hasattr(self._sys, "orb_irreps_to_int"):
-                self._pool_obj.set_orb_spaces(self._ref, self._sys.orb_irreps_to_int)
+            if getattr(self, "computer", False):
+                if len(self.computer.get_refs()) > 1 and self._pool_type == "sa_SD":
+                    raise ValueError("Multi-reference does not support the sa_SD pool type.")
+                for _ref in self.computer.get_refs():
+                    ref = _ref[0]
+                    r = [int(i) for i in bin(ref)[2:]] + (self._nqb - len(bin(ref)[2:]))*[0]
+                    if hasattr(self._sys, "orb_irreps_to_int"):
+                        self._pool_obj.set_orb_spaces(r, self._sys.orb_irreps_to_int)
+                    else:
+                        self._pool_obj.set_orb_spaces(r)
             else:
-                self._pool_obj.set_orb_spaces(self._ref)
-            self._pool_obj.fill_pool(self._pool_type)
+                r = self._ref
+                if hasattr(self._sys, "orb_irreps_to_int"):
+                    self._pool_obj.set_orb_spaces(r, self._sys.orb_irreps_to_int)
+                else:
+                    self._pool_obj.set_orb_spaces(r)
+            remove_redundancies = getattr(self, "_remove_redundancies", True)
+            self._pool_obj.fill_pool(self._pool_type, remove_redundancies)
         elif isinstance(self._pool_type, qf.SQOpPool):
             self._pool_obj = self._pool_type
         else:
@@ -322,7 +339,7 @@ class AnsatzAlgorithm(Algorithm):
             computer.apply_circuit(Ucirc)
             val = np.real(computer.direct_op_exp_val(self._qb_ham))
         else:
-            if compute is not None:
+            if computer is not None:
                 raise TypeError(
                     "measure_energy in slow mode does not support custom Computer."
                 )

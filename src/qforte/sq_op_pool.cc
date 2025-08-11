@@ -25,19 +25,22 @@ void SQOpPool::set_coeffs(const std::vector<std::complex<double>>& new_coeffs) {
     }
 }
 
-const std::vector<std::pair<std::complex<double>, SQOperator>>& SQOpPool::terms() const {
-    return terms_;
-}
-
 void SQOpPool::set_orb_spaces(const std::vector<int>& ref,
                               const std::vector<size_t>& orb_irreps_to_int) {
-    // compute integer representing reference determiant
-    ref_int_ = 0;
+    // compute integer representing reference determinant
+    uint64_t ref_int_ = 0;
     int multiplier = 1;
     for (const auto& occupancy : ref) {
         ref_int_ += occupancy * multiplier;
         multiplier = multiplier << 1;
     }
+
+    // add determinant if not already present
+    if (std::find(ref_ints_.begin(), ref_ints_.end(), ref_int_) == ref_ints_.end()) {
+        ref_ints_.push_back(ref_int_);
+        n_ref_det_++;
+    }
+    std::sort(ref_ints_.begin(), ref_ints_.end());
 
     // set orbital spaces
     n_spinorb_ = ref.size();
@@ -108,7 +111,7 @@ QubitOperator SQOpPool::get_qubit_operator(const std::string& order_type, bool c
     return parent;
 }
 
-void SQOpPool::fill_pool(std::string pool_type) {
+void SQOpPool::fill_pool(std::string pool_type, bool remove_redundancies) {
     if (pool_type == "GSD") {
         size_t norb = n_spinorb_ / 2;
         for (size_t i = 0; i < norb; i++) {
@@ -342,6 +345,7 @@ void SQOpPool::fill_pool(std::string pool_type) {
             throw std::invalid_argument("Qforte UCC only supports up to Hextuple excitations.");
         }
 
+        uint64_t ref_int_ = ref_ints_[0];
         std::bitset<64> ref_bin(ref_int_);
         auto ref_bin_str = ref_bin.to_string().substr(64 - n_spinorb_);
 
@@ -382,23 +386,32 @@ void SQOpPool::fill_pool(std::string pool_type) {
                 dets_int.push_back(det_bit.to_ullong());
             }
         }
-
         // To reproduce the results of older versions of QForte, the dets are sorted
         std::sort(dets_int.begin(), dets_int.end());
-
+        bool det_int_used;
         for (const auto& det_int : dets_int) {
-            // Create the bitstring of created/annihilated orbitals
-            std::bitset<64> excit(ref_int_ ^ det_int);
-            auto excit_str = excit.to_string().substr(64 - n_spinorb_);
-            int n_excitation_indices = std::count(excit_str.begin(), excit_str.end(), '1');
-            if (n_excitation_indices % 2 != 0) {
-                throw std::invalid_argument(
-                    "The number of excitation indices must be an even number!");
-            }
-            int excit_rank = n_excitation_indices / 2;
-            // Confirm excitation number is non-zero and consider operators with rank <=
-            // max_excit_rank
-            if (excit_rank != 0 && excit_rank <= max_nbody) {
+            det_int_used = false;
+            for (const auto& ref_int_ : ref_ints_) {
+                // Skip if the determinant has already been used to generate an operator
+                if (remove_redundancies && det_int_used){
+                    continue;
+                }
+                std::bitset<64> ref_bin(ref_int_);
+                auto ref_bin_str = ref_bin.to_string().substr(64 - n_spinorb_);
+                // Create the bitstring of created/annihilated orbitals
+                std::bitset<64> excit(ref_int_ ^ det_int);
+                auto excit_str = excit.to_string().substr(64 - n_spinorb_);
+                int n_excitation_indices = std::count(excit_str.begin(), excit_str.end(), '1');
+                if (n_excitation_indices % 2 != 0) {
+                    throw std::invalid_argument(
+                        "The number of excitation indices must be an even number!");
+                }
+                int excit_rank = n_excitation_indices / 2;
+                // Confirm excitation number is non-zero and consider operators with rank <=
+                // max_excit_rank
+                if (excit_rank == 0 || excit_rank > max_nbody) {
+                    continue;
+                }
                 // Get the indices of occupied and unoccupied orbitals
                 std::vector<size_t> occ_idx;
                 std::vector<size_t> unocc_idx;
@@ -426,7 +439,18 @@ void SQOpPool::fill_pool(std::string pool_type) {
                     std::vector<size_t> rocc_idx(occ_idx.rbegin(), occ_idx.rend());
                     t_temp.add_term(-1.0, rocc_idx, runocc_idx);
                     t_temp.simplify();
+                    // Check if the term is already in the pool
+                    if (n_ref_det_ > 1){
+                        if (std::find_if(
+                                terms_.begin(),
+                                terms_.end(),
+                                [&t_temp](const std::pair<std::complex<double>, SQOperator>& p){return p.second == t_temp;}
+                            ) != terms_.end()) {
+                            continue;
+                        }
+                    }
                     add_term(1.0, t_temp);
+                    det_int_used = true;
                 }
             }
         }

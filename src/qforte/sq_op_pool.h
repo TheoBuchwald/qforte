@@ -25,7 +25,7 @@ class SQOpPool {
     void set_coeffs(const std::vector<std::complex<double>>& new_coeffs);
 
     /// return a vector of terms and their coeficients
-    const std::vector<std::pair<std::complex<double>, SQOperator>>& terms() const;
+    const std::vector<std::pair<std::complex<double>, SQOperator>>& terms() const {return terms_;};
 
     /// set the total number of occupied and virtual spatial orbitals from a reference, from the
     /// number
@@ -41,14 +41,14 @@ class SQOpPool {
                                      bool qubit_excitations = false);
 
     /// builds the sq operator pool
-    void fill_pool(std::string pool_type);
+    void fill_pool(std::string pool_type, bool remove_redundancies = true);
 
     /// return a vector of string representing this sq operator pool
     std::string str() const;
 
   private:
-    /// the integer representing the refrence determinant
-    uint64_t ref_int_;
+    /// the integers representing the reference determinants
+    std::vector<uint64_t> ref_ints_;
 
     /// the number of spinorbitals
     int n_spinorb_;
@@ -64,6 +64,9 @@ class SQOpPool {
 
     /// the number of virtual beta spinorbitals
     int n_vir_beta_;
+
+    /// the number of reference determinants
+    int n_ref_det_;
 
     /// the list of integers representing the irreps of the orbitals
     std::vector<size_t> orb_irreps_to_int_;
