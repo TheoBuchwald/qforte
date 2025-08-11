@@ -42,3 +42,10 @@ qforte.egg-info/
 
 # local binary files
 *tests/bin/
+
+*.cube
+*.clean
+*.json
+*.xyz
+*.dat
+*.ipynb
