@@ -48,6 +48,7 @@ PYBIND11_MODULE(qforte, m) {
         .def("set_parameter", &Circuit::set_parameter)
         .def("get_parameters", &Circuit::get_parameters)
         .def("get_num_cnots", &Circuit::get_num_cnots)
+        .def("num_qubits", &Circuit::num_qubits)
         .def("is_pauli", &Circuit::is_pauli)
         .def("simplify", &Circuit::simplify)
         .def("str", &Circuit::str)
@@ -82,7 +83,8 @@ PYBIND11_MODULE(qforte, m) {
         .def("get_qubit_op_pool", &SQOpPool::get_qubit_op_pool)
         .def("get_qubit_operator", &SQOpPool::get_qubit_operator, py::arg("order_type"),
              py::arg("combine_like_terms") = true, py::arg("qubit_excitations") = false)
-        .def("fill_pool", &SQOpPool::fill_pool)
+        .def("fill_pool", &SQOpPool::fill_pool, py::arg("pool_type"),
+             py::arg("remove_redundancies") = true)
         .def("str", &SQOpPool::str)
         .def("__getitem__", [](const SQOpPool& pool, size_t i) { return pool.terms()[i]; })
         .def(
@@ -171,6 +173,8 @@ PYBIND11_MODULE(qforte, m) {
         .def("direct_gate_exp_val", &Computer::direct_gate_exp_val)
         .def("coeff", &Computer::coeff)
         .def("get_coeff_vec", &Computer::get_coeff_vec)
+        .def("get_basis_vec", &Computer::get_basis_vec)
+        .def("get_refs", &Computer::get_refs)
         .def("get_nqubit", &Computer::get_nqubit)
         .def("set_coeff_vec", &Computer::set_coeff_vec)
         .def("set_coeff_vec_from_numpy",
@@ -341,7 +345,7 @@ PYBIND11_MODULE(qforte, m) {
         },
         R"pbdoc(
                Function that finds the irreducible representation of a given set of spinorbitals.
-               
+
                :param orb_irrep_to_int: List of integers where the i-th element is the irrep of spatial orbital i.
                :param spinorb_indices: List of spinorbital indices.
                :return: Integer representing the irrep (in Cotton ordering) of the given set of spinorbitals.
