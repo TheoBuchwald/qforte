@@ -6,6 +6,7 @@ ansatz. Member functions should be minimal and aim only to implement
 the ansatz circut and potential supporting utility functions.
 """
 
+import numpy as np
 import qforte as qf
 
 from qforte.utils.state_prep import build_refprep
@@ -100,17 +101,28 @@ class UCC(Trotterizable):
         else:
             print("\nBuilding single-particle energies:")
             print("---------------------------------------", flush=True)
-            qc = qf.Computer(self._nqb)
-            qc.apply_circuit(self._refprep)
+            if getattr(self, "computer", None) is not None:
+                qc = qf.Computer(self.computer)
+                uses_computer = True
+            else:
+                qc = qf.Computer(self._nqb)
+                qc.apply_circuit(self._refprep)
+                uses_computer = False
             E0 = qc.direct_op_exp_val(self._qb_ham)
 
             for i in range(self._nqb):
-                qc = qf.Computer(self._nqb)
-                qc.apply_circuit(self._refprep)
+                if uses_computer:
+                    qc = qf.Computer(self.computer)
+                    ref_ = self.computer.get_refs()[0]
+                    ref = [int(i) for i in bin(ref_[0])[2:]] + (self._nqb - len(bin(ref_[0])[2:])) * [0]
+                else:
+                    qc = qf.Computer(self._nqb)
+                    qc.apply_circuit(self._refprep)
+                    ref = self._ref
                 qc.apply_gate(qf.gate("X", i, i))
                 Ei = qc.direct_op_exp_val(self._qb_ham)
 
-                if i < sum(self._ref):
+                if i < sum(ref):
                     ei = E0 - Ei
                 else:
                     ei = Ei - E0
@@ -129,26 +141,58 @@ class UCC(Trotterizable):
             residuals.
         """
 
-        resids_over_denoms = []
-
-        # loop over toperators
-        for mu, m in enumerate(self._tops):
-            sq_op = self._pool_obj[m][1]
-
-            temp_idx = sq_op.terms()[0][2][-1]
-            if self._ref[temp_idx]:  # if temp_idx is an occupied idx
-                sq_creators = sq_op.terms()[0][1]
-                sq_annihilators = sq_op.terms()[0][2]
+        if getattr(self, "computer", None) is not None and len(self.computer.get_refs()) > 1:
+            num_amp = len(self._tops)
+            jac = np.zeros((num_amp, num_amp), dtype=np.complex128)
+            for mu, m in enumerate(self._tops):
+                mu_det = self._excited_dets[m]
+                for nu, n in enumerate(self._tops):
+                    jac_val = 0.0
+                    nu_det = self._excited_dets[n]
+                    for M, mu_coeff in mu_det.items():
+                        for N, nu_coeff in nu_det.items():
+                            if M != N:
+                                continue
+                            jac_val += nu_coeff[0] * mu_coeff[1] * nu_coeff[1]
+                    jac[mu, nu] = jac_val
+            for nu, n in enumerate(self._tops):
+                nu_op = self._pool_obj[n][1]
+                sq_creators = nu_op.terms()[0][1]
+                sq_annihilators = nu_op.terms()[0][2]
+                jac[:, nu] *= (
+                    sum(self._orb_e[x] for x in sq_annihilators)
+                    - sum(self._orb_e[x] for x in sq_creators)
+                )
+            remove_redundancies = getattr(self, "_remove_redundancies", True)
+            if remove_redundancies:
+                try:
+                    resids_over_denoms = np.linalg.solve(jac, np.reshape(residuals, (len(residuals), 1))).flatten()
+                except np.linalg.LinAlgError:
+                    # If the system is singular, we use lstsq to find a least-squares solution
+                    resids_over_denoms = np.linalg.lstsq(jac, np.reshape(residuals, (len(residuals), 1)), rcond=None)[0].flatten()
             else:
-                sq_creators = sq_op.terms()[0][2]
-                sq_annihilators = sq_op.terms()[0][1]
+                resids_over_denoms = np.linalg.lstsq(jac, np.reshape(residuals, (len(residuals), 1)), rcond=None)[0].flatten()
+        else:
+            resids_over_denoms = []
 
-            denom = sum(self._orb_e[x] for x in sq_annihilators) - sum(
-                self._orb_e[x] for x in sq_creators
-            )
+            # loop over toperators
+            for mu, m in enumerate(self._tops):
+                sq_op = self._pool_obj[m][1]
 
-            res_mu = residuals[mu] / denom
+                temp_idx = sq_op.terms()[0][2][-1]
+                if self._ref[temp_idx]:  # if temp_idx is an occupied idx
+                    sq_creators = sq_op.terms()[0][1]
+                    sq_annihilators = sq_op.terms()[0][2]
+                else:
+                    sq_creators = sq_op.terms()[0][2]
+                    sq_annihilators = sq_op.terms()[0][1]
 
-            resids_over_denoms.append(res_mu)
+                denom = sum(self._orb_e[x] for x in sq_annihilators) - sum(
+                    self._orb_e[x] for x in sq_creators
+                )
+
+                res_mu = residuals[mu] / denom
+
+                resids_over_denoms.append(res_mu)
 
         return resids_over_denoms
