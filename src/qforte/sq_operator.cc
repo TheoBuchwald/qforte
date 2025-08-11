@@ -85,6 +85,24 @@ void SQOperator::simplify() {
     }
 }
 
+bool operator==(const SQOperator& lhs, const SQOperator& rhs) {
+    if (lhs.terms().size() != rhs.terms().size()) {
+        return false;
+    }
+    for (size_t i = 0; i < lhs.terms().size(); ++i) {
+        auto lhs_ = lhs.terms()[i];
+        if (std::find_if(rhs.terms().begin(), rhs.terms().end(), [&lhs_](const auto& r){
+            return (
+                (std::get<1>(r) == std::get<1>(lhs_) && std::get<2>(r) == std::get<2>(lhs_)) ||
+                (std::get<2>(r) == std::get<1>(lhs_) && std::get<1>(r) == std::get<2>(lhs_))
+            );
+        }) == rhs.terms().end()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool SQOperator::permutation_phase(std::vector<int> p) const {
     std::vector<int> a(p.size());
     std::iota(std::begin(a), std::end(a), 0);

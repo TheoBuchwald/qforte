@@ -84,4 +84,6 @@ class SQOperator {
                    bool qubit_excitation) const;
 };
 
+bool operator==(const SQOperator& lhs, const SQOperator& rhs);
+
 #endif // _sq_operator_h_
