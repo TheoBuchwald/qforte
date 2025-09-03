@@ -61,10 +61,15 @@ class UCCNPQE(UCCPQE):
         noise_factor=0.0,
         optimizer="jacobi",
         remove_redundancies=True,
+        extended_jacobian=False,
     ):
         if self._state_prep_type not in ("occupation_list", "computer"):
             raise ValueError(
                 "PQE implementation can only handle occupation_list Hartree-Fock reference and computer reference."
+            )
+        if extended_jacobian and getattr(self, "computer", None) is None:
+            raise ValueError(
+                "Extended Jacobian requires a computer object with multiple references."
             )
 
         self._pool_type = pool_type
@@ -73,6 +78,7 @@ class UCCNPQE(UCCPQE):
         self._opt_maxiter = opt_maxiter
         self._noise_factor = noise_factor
         self._remove_redundancies = remove_redundancies
+        self._extended_jacobian = extended_jacobian
 
         self._tops = []
         self._tamps = []
@@ -80,7 +86,7 @@ class UCCNPQE(UCCPQE):
 
         self._res_vec_evals = 0
         self._res_m_evals = 0
-        # list: tuple(excited determinant, phase_factor)
+        # list: tuple(excited determinant: (sign, phase_factor))
         self._excited_dets = []
 
         self._n_classical_params = 0
@@ -90,6 +96,8 @@ class UCCNPQE(UCCPQE):
 
         self.print_options_banner()
         self.fill_pool()
+        if self._extended_jacobian and getattr(self, "computer", None) is not None and len(self.computer.get_refs()) > 1:
+            self.fill_commutator_pool()
 
         if self._verbose:
             print("\n\n-------------------------------------")
@@ -130,6 +138,10 @@ class UCCNPQE(UCCPQE):
             2 * self._Nl * self._res_vec_evals * self._n_nonzero_params
             + self._Nl * self._res_vec_evals
         )
+        # Nr. of measurements for Jacobian
+        if self._extended_jacobian and getattr(self, "computer", None) is not None and len(self.computer.get_refs()) > 1:
+            for comm in self._commutator_pool:
+                self._n_pauli_trm_measures += 2 * len(self._tops) * len(comm[1].terms()) + len(comm[1].terms())
 
         self.print_summary_banner()
         self.verify_run()
@@ -208,7 +220,7 @@ class UCCNPQE(UCCPQE):
 
             for ref_ in refs:
                 if uses_computer:
-                    ref = [int(i) for i in bin(ref_[0])[2:]] + (self._nqb - len(bin(ref_[0])[2:])) * [0]
+                        ref = [int(i) for i in bin(ref_[0])[2:]][::-1] + (self._nqb - len(bin(ref_[0])[2:])) * [0]
                 else:
                     ref = ref_
 
@@ -329,7 +341,7 @@ class UCCNPQE(UCCPQE):
         """Adds all operators in the pool to the list of operators in the circuit,
         with amplitude 0.
         """
-        for l in range(len(self._pool_obj)):
+        for l, _ in enumerate(self._pool_obj):
             self._tops.append(l)
             self._tamps.append(0.0)
 

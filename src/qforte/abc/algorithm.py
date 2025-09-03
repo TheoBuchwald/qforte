@@ -109,7 +109,7 @@ class Algorithm(ABC):
             if (
                 not getattr(self, "computer_initializable", False)
             ):
-                raise ValueError("Class cannot be initialized with a computer.")
+                raise ValueError(f"{self.__class__.__name__} cannot be initialized with a computer.")
 
             self._ref = system.hf_reference
             self._refprep = build_refprep(self._ref)
@@ -301,7 +301,7 @@ class AnsatzAlgorithm(Algorithm):
                     raise ValueError("Multi-reference does not support the sa_SD pool type.")
                 for _ref in self.computer.get_refs():
                     ref = _ref[0]
-                    r = [int(i) for i in bin(ref)[2:]] + (self._nqb - len(bin(ref)[2:]))*[0]
+                    r = [int(i) for i in bin(ref)[2:]][::-1] + (self._nqb - len(bin(ref)[2:]))*[0]
                     if hasattr(self._sys, "orb_irreps_to_int"):
                         self._pool_obj.set_orb_spaces(r, self._sys.orb_irreps_to_int)
                     else:

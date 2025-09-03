@@ -84,14 +84,14 @@ def jacobi_solver(self):
 
         if self.__class__.__name__ in ["UCCNPQE", "SPQE"]:
             print(
-                f"     {k:7}        {Ek:+12.10f}      {dE:+12.10f}      {self._res_vec_evals:4}        {self._res_m_evals:6}       {self._res_vec_norm:+12.10f}"
+                f"     {k:7}        {Ek:+12.10f}      {dE:+12.10f}      {self._res_vec_evals:4}        {self._res_m_evals:6}       {self._res_vec_norm:+12.10f}", flush=True
             )
             if self._res_vec_norm < self._opt_thresh:
                 self._Egs = Ek
                 break
         elif self.__class__.__name__ in ["UCCNVQE", "ADAPTVQE"]:
             print(
-                f"     {k:7}        {Ek:+12.10f}      {dE:+12.10f}      {self._res_vec_evals:4}        {self._res_m_evals:6}       {self._curr_grad_norm:+12.10f}"
+                f"     {k:7}        {Ek:+12.10f}      {dE:+12.10f}      {self._res_vec_evals:4}        {self._res_m_evals:6}       {self._curr_grad_norm:+12.10f}", flush=True
             )
             if self._curr_grad_norm < self._opt_thresh:
                 self._Egs = Ek

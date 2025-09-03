@@ -114,7 +114,7 @@ class UCC(Trotterizable):
                 if uses_computer:
                     qc = qf.Computer(self.computer)
                     ref_ = self.computer.get_refs()[0]
-                    ref = [int(i) for i in bin(ref_[0])[2:]] + (self._nqb - len(bin(ref_[0])[2:])) * [0]
+                    ref = [int(i) for i in bin(ref_[0])[2:]][::-1] + (self._nqb - len(bin(ref_[0])[2:])) * [0]
                 else:
                     qc = qf.Computer(self._nqb)
                     qc.apply_circuit(self._refprep)
@@ -142,36 +142,53 @@ class UCC(Trotterizable):
         """
 
         if getattr(self, "computer", None) is not None and len(self.computer.get_refs()) > 1:
-            num_amp = len(self._tops)
-            jac = np.zeros((num_amp, num_amp), dtype=np.complex128)
-            for mu, m in enumerate(self._tops):
-                mu_det = self._excited_dets[m]
+
+            if not hasattr(self, "_jac") and not getattr(self, "_extended_jacobian", False):
+                num_amp = len(self._tops)
+                self._jac = np.zeros((num_amp, num_amp), dtype=np.complex128)
+                for mu, m in enumerate(self._tops):
+                    mu_det = self._excited_dets[m]
+                    for nu, n in enumerate(self._tops):
+                        jac_val = 0.0
+                        nu_det = self._excited_dets[n]
+                        for M, mu_coeff in mu_det.items():
+                            for N, nu_coeff in nu_det.items():
+                                if M != N:
+                                    continue
+                                jac_val += mu_coeff[0] * mu_coeff[1] * nu_coeff[1]
+                        self._jac[mu, nu] = jac_val
                 for nu, n in enumerate(self._tops):
-                    jac_val = 0.0
-                    nu_det = self._excited_dets[n]
-                    for M, mu_coeff in mu_det.items():
-                        for N, nu_coeff in nu_det.items():
-                            if M != N:
-                                continue
-                            jac_val += nu_coeff[0] * mu_coeff[1] * nu_coeff[1]
-                    jac[mu, nu] = jac_val
-            for nu, n in enumerate(self._tops):
-                nu_op = self._pool_obj[n][1]
-                sq_creators = nu_op.terms()[0][1]
-                sq_annihilators = nu_op.terms()[0][2]
-                jac[:, nu] *= (
-                    sum(self._orb_e[x] for x in sq_annihilators)
-                    - sum(self._orb_e[x] for x in sq_creators)
-                )
+                    nu_op = self._pool_obj[n][1]
+                    sq_creators = nu_op.terms()[0][1]
+                    sq_annihilators = nu_op.terms()[0][2]
+                    self._jac[:, nu] *= (
+                        sum(self._orb_e[x] for x in sq_annihilators)
+                        - sum(self._orb_e[x] for x in sq_creators)
+                    )
+            elif not hasattr(self, "_jac"):
+                num_amp = len(self._tops)
+                self._jac = np.zeros((num_amp, num_amp), dtype=np.complex128)
+                for nu, n in enumerate(self._tops):
+                    comm = self._commutator_pool[n][1]
+                    qc_comm = qf.Computer(self.computer)
+                    qc_comm.apply_operator(comm)
+                    nu_coeffs = qc_comm.get_coeff_vec()
+                    for mu, m in enumerate(self._tops):
+                        mu_det = self._excited_dets[m]
+                        jac_val = 0.0
+                        for M, mu_coeff in mu_det.items():
+                            jac_val += mu_coeff[0] * mu_coeff[1] * nu_coeffs[M]
+                        self._jac[mu, nu] = jac_val
+
             remove_redundancies = getattr(self, "_remove_redundancies", True)
             if remove_redundancies:
                 try:
-                    resids_over_denoms = np.linalg.solve(jac, np.reshape(residuals, (len(residuals), 1))).flatten()
+                    resids_over_denoms = np.linalg.solve(self._jac, np.reshape(residuals, (len(residuals), 1))).flatten()
                 except np.linalg.LinAlgError:
                     # If the system is singular, we use lstsq to find a least-squares solution
-                    resids_over_denoms = np.linalg.lstsq(jac, np.reshape(residuals, (len(residuals), 1)), rcond=None)[0].flatten()
+                    resids_over_denoms = np.linalg.lstsq(self._jac, np.reshape(residuals, (len(residuals), 1)), rcond=None)[0].flatten()
             else:
-                resids_over_denoms = np.linalg.lstsq(jac, np.reshape(residuals, (len(residuals), 1)), rcond=None)[0].flatten()
+                resids_over_denoms = np.linalg.lstsq(self._jac, np.reshape(residuals, (len(residuals), 1)), rcond=None)[0].flatten()
         else:
             resids_over_denoms = []
 
