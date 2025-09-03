@@ -323,6 +323,12 @@ class AnsatzAlgorithm(Algorithm):
             len(operator.jw_transform().terms()) for _, operator in self._pool_obj
         ]
 
+    def fill_commutator_pool(self):
+        print("\n\n==> Building commutator pool for gradient measurement.")
+        self._commutator_pool = self._pool_obj.get_qubit_op_pool()
+        self._commutator_pool.join_as_commutator(self._qb_ham)
+        print("==> Commutator pool construction complete.")
+
     def measure_energy(self, Ucirc, computer=None):
         """
         This function returns the energy expectation value of the state
