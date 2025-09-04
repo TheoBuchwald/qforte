@@ -459,15 +459,39 @@ void SQOpPool::fill_pool(std::string pool_type, bool remove_redundancies) {
             throw std::invalid_argument(
                 "sa_SD operator pool requires a closed-shell reference determinant!");
         }
-        int nocc_ = n_occ_alpha_;
-        int nvir_ = n_vir_alpha_;
-        for (size_t i = 0; i < nocc_; i++) {
+        std::bitset<64> occ_orbs(ref_ints_[0]);
+        std::bitset<64> act_orbs(ref_ints_[0]);
+        for (const auto ref_int_ : ref_ints_) {
+            occ_orbs = occ_orbs & std::bitset<64>(ref_int_);
+            act_orbs = act_orbs | std::bitset<64>(ref_int_);
+        }
+        std::bitset<64> vir_orbs = ~act_orbs;
+        act_orbs = act_orbs & ~occ_orbs;
+        size_t nocc_ = occ_orbs.count() / 2;
+        size_t nact_ = act_orbs.count() / 2;
+        size_t nvir_ = size_t(n_occ_alpha_ + n_vir_alpha_) - nocc_ - nact_;
+        for (size_t i = 0; i < nocc_ + nact_; i++) {
             size_t ia = 2 * i;
             size_t ib = 2 * i + 1;
 
-            for (size_t a = 0; a < nvir_; a++) {
+            for (size_t a = 0; a < nact_ + nvir_; a++) {
                 size_t aa = 2 * nocc_ + 2 * a;
                 size_t ab = 2 * nocc_ + 2 * a + 1;
+
+                // Skip if dexcitation
+                if (remove_redundancies && aa <= ia) {
+                    continue;
+                }
+                // Skip if all in active space
+                else if (
+                    ia > nocc_ && ia < nocc_ + nact_
+                    && aa > nocc_ && aa < nocc_ + nact_
+                ) {
+                        continue;
+                }
+                else if (aa == ia) {
+                    continue;
+                }
 
                 if (!find_irrep(orb_irreps_to_int_, std::vector<size_t>{ia, aa})) {
 
@@ -485,21 +509,50 @@ void SQOpPool::fill_pool(std::string pool_type, bool remove_redundancies) {
             }
         }
 
-        for (size_t i = 0; i < nocc_; i++) {
+        for (size_t i = 0; i < nocc_ + nact_; i++) {
             size_t ia = 2 * i;
             size_t ib = 2 * i + 1;
 
-            for (size_t j = i; j < nocc_; j++) {
+            for (size_t j = i; j < nocc_ + nact_; j++) {
                 size_t ja = 2 * j;
                 size_t jb = 2 * j + 1;
 
-                for (size_t a = 0; a < nvir_; a++) {
+                for (size_t a = 0; a < nact_ + nvir_; a++) {
                     size_t aa = 2 * nocc_ + 2 * a;
                     size_t ab = 2 * nocc_ + 2 * a + 1;
 
-                    for (size_t b = a; b < nvir_; b++) {
+                    // Skip if dexcitation
+                    if (remove_redundancies && aa <= ia) {
+                        continue;
+                    }
+                    // Skip if dexcitation
+                    else if (remove_redundancies && aa <= ja) {
+                        continue;
+                    }
+                    else if (aa == ia) {
+                        continue;
+                    }
+
+                    for (size_t b = a; b < nact_ + nvir_; b++) {
                         size_t ba = 2 * nocc_ + 2 * b;
                         size_t bb = 2 * nocc_ + 2 * b + 1;
+
+                        // Skip if dexcitation
+                        if (remove_redundancies && ba <= ja) {
+                            continue;
+                        }
+                        // Skip if all in active space
+                        else if (
+                            ia > nocc_ && ia < nocc_ + nact_
+                            && aa > nocc_ && aa < nocc_ + nact_
+                            && ja > nocc_ && ja < nocc_ + nact_
+                            && ba > nocc_ && ba < nocc_ + nact_
+                        ) {
+                                continue;
+                        }
+                        else if (ba== ja) {
+                            continue;
+                        }
 
                         if (!find_irrep(orb_irreps_to_int_, std::vector<size_t>{ia, ja, aa, ba})) {
 

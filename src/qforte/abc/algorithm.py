@@ -294,11 +294,9 @@ class AnsatzAlgorithm(Algorithm):
     def fill_pool(self):
         """This function populates an operator pool with SQOperator objects."""
 
-        if self._pool_type in {"sa_SD", "GSD", "SD", "SDT", "SDTQ", "SDTQP", "SDTQPH"}:
+        if self._pool_type in {"sa_SD", "GSD", "S", "SD", "SDT", "SDTQ", "SDTQP", "SDTQPH"}:
             self._pool_obj = qf.SQOpPool()
             if getattr(self, "computer", False):
-                if len(self.computer.get_refs()) > 1 and self._pool_type == "sa_SD":
-                    raise ValueError("Multi-reference does not support the sa_SD pool type.")
                 for _ref in self.computer.get_refs():
                     ref = _ref[0]
                     r = [int(i) for i in bin(ref)[2:]][::-1] + (self._nqb - len(bin(ref)[2:]))*[0]

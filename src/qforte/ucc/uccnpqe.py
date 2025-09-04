@@ -206,87 +206,105 @@ class UCCNPQE(UCCPQE):
         else:
             refs = [self._ref]
             uses_computer = False
-        for _, sq_op in self._pool_obj:
-            excited_sr_det = {}
-            destroyed_mr = []
+        if self._pool_type == "sa_SD":
+            for _, sq_op in self._pool_obj:
+                excited_sr_det = {}
+                destroyed_mr = []
 
-            if uses_computer:
-                qc_temp = qforte.Computer(self.computer)
-                qc_temp.apply_operator(sq_op.jw_transform(self._qubit_excitations))
-            else:
-                qc_temp = qforte.Computer(self._nqb)
-                qc_temp.apply_circuit(self._refprep)
-                qc_temp.apply_operator(sq_op.jw_transform(self._qubit_excitations))
-
-            for ref_ in refs:
                 if uses_computer:
+                    qc_temp = qforte.Computer(self.computer)
+                    qc_temp.apply_operator(sq_op.jw_transform(self._qubit_excitations))
+                else:
+                    qc_temp = qforte.Computer(self._nqb)
+                    qc_temp.apply_circuit(self._refprep)
+                    qc_temp.apply_operator(sq_op.jw_transform(self._qubit_excitations))
+
+                for I, phase_factor in qc_temp.get_refs():
+                    excited_sr_det[I] = (1, phase_factor)
+
+                self._excited_dets.append(excited_sr_det)
+        else:
+            for _, sq_op in self._pool_obj:
+                excited_sr_det = {}
+                destroyed_mr = []
+
+                if uses_computer:
+                    qc_temp = qforte.Computer(self.computer)
+                    qc_temp.apply_operator(sq_op.jw_transform(self._qubit_excitations))
+                else:
+                    qc_temp = qforte.Computer(self._nqb)
+                    qc_temp.apply_circuit(self._refprep)
+                    qc_temp.apply_operator(sq_op.jw_transform(self._qubit_excitations))
+
+                for ref_ in refs:
+                    if uses_computer:
                         ref = [int(i) for i in bin(ref_[0])[2:]][::-1] + (self._nqb - len(bin(ref_[0])[2:])) * [0]
-                else:
-                    ref = ref_
+                    else:
+                        ref = ref_
 
-                # 1. Identify the excitation operator
-                # occ => i,j,k,...
-                # vir => a,b,c,...
-                # sq_op is 1.0(a^ b^ i j) - 1.0(j^ i^ b a)
+                    # 1. Identify the excitation operator
+                    # occ => i,j,k,...
+                    # vir => a,b,c,...
+                    # sq_op is 1.0(a^ b^ i j) - 1.0(j^ i^ b a)
 
-                temp_idx = sq_op.terms()[0][2][-1]
-                if ref[temp_idx]:  # if temp_idx is an occupied idx
-                    sq_creators = sq_op.terms()[0][1]
-                    sq_annihilators = sq_op.terms()[0][2]
-                    sign = 1
-                else:
-                    sq_creators = sq_op.terms()[0][2]
-                    sq_annihilators = sq_op.terms()[0][1]
-                    sign = -1
+                    temp_idx = sq_op.terms()[0][2][-1]
+                    if ref[temp_idx]:  # if temp_idx is an occupied idx
+                        sq_creators = sq_op.terms()[0][1]
+                        sq_annihilators = sq_op.terms()[0][2]
+                        sign = 1
+                    else:
+                        sq_creators = sq_op.terms()[0][2]
+                        sq_annihilators = sq_op.terms()[0][1]
+                        sign = -1
 
-                # 2. Get the bit representation of the sq_ex_op acting on the reference.
-                # We determine the projective condition for this amplitude by zero'ing this residual.
+                    # 2. Get the bit representation of the sq_ex_op acting on the reference.
+                    # We determine the projective condition for this amplitude by zero'ing this residual.
 
-                # `destroyed` exists solely for error catching.
-                destroyed = False
+                    # `destroyed` exists solely for error catching.
+                    destroyed = False
 
-                excited_det = qforte.QubitBasis(self._nqb)
-                for k, occ in enumerate(ref):
-                    excited_det.set_bit(k, occ)
+                    excited_det = qforte.QubitBasis(self._nqb)
+                    for k, occ in enumerate(ref):
+                        excited_det.set_bit(k, occ)
 
-                # loop over annihilators
-                for p in reversed(sq_annihilators):
-                    if excited_det.get_bit(p) == 0:
-                        destroyed = True
-                        break
+                    # loop over annihilators
+                    for p in reversed(sq_annihilators):
+                        if excited_det.get_bit(p) == 0:
+                            destroyed = True
+                            break
 
-                    excited_det.set_bit(p, 0)
+                        excited_det.set_bit(p, 0)
 
-                # then over creators
-                for p in reversed(sq_creators):
-                    if excited_det.get_bit(p) == 1:
-                        destroyed = True
-                        break
+                    # then over creators
+                    for p in reversed(sq_creators):
+                        if excited_det.get_bit(p) == 1:
+                            destroyed = True
+                            break
 
-                    excited_det.set_bit(p, 1)
+                        excited_det.set_bit(p, 1)
 
-                # For a multi-reference state some determinants may be destroyed
-                # so we cannot raise an error in that case.
-                if destroyed and len(refs) > 1:
-                    destroyed_mr.append(ref_)
-                    continue
-                elif destroyed:
+                    # For a multi-reference state some determinants may be destroyed
+                    # so we cannot raise an error in that case.
+                    if destroyed and len(refs) > 1:
+                        destroyed_mr.append(ref_)
+                        continue
+                    elif destroyed:
+                        raise ValueError(
+                            "no ops should destroy reference, something went wrong!!"
+                        )
+
+                    I = excited_det.index()
+                    phase_factor = qc_temp.get_coeff_vec()[I]
+
+                    excited_sr_det[I] = (sign, phase_factor)
+
+                # For multi-reference states this is equivalent to a destroyed reference
+                if destroyed_mr == refs:
                     raise ValueError(
                         "no ops should destroy reference, something went wrong!!"
                     )
 
-                I = excited_det.index()
-                phase_factor = qc_temp.get_coeff_vec()[I]
-
-                excited_sr_det[I] = (sign, phase_factor)
-
-            # For multi-reference states this is equivalent to a destroyed reference
-            if destroyed_mr == refs:
-                raise ValueError(
-                    "no ops should destroy reference, something went wrong!!"
-                )
-
-            self._excited_dets.append(excited_sr_det)
+                self._excited_dets.append(excited_sr_det)
 
     def get_residual_vector(self, trial_amps):
         """Returns the residual vector with elements pertaining to all operators
@@ -298,10 +316,6 @@ class UCCNPQE(UCCPQE):
             The list of (real) floating point numbers which will characterize
             the state preparation circuit used in calculation of the residuals.
         """
-        if self._pool_type == "sa_SD":
-            raise ValueError(
-                "Must use single term particle-hole nbody operators for residual calculation"
-            )
 
         U = self.ansatz_circuit(trial_amps)
 
