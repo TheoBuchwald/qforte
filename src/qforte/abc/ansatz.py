@@ -155,7 +155,7 @@ class UCC(Trotterizable):
                             for N, nu_coeff in nu_det.items():
                                 if M != N:
                                     continue
-                                jac_val += mu_coeff[0] * mu_coeff[1] * nu_coeff[1]
+                                jac_val -= mu_coeff * nu_coeff
                         self._jac[mu, nu] = jac_val
                 for nu, n in enumerate(self._tops):
                     nu_op = self._pool_obj[n][1]
@@ -177,7 +177,7 @@ class UCC(Trotterizable):
                         mu_det = self._excited_dets[m]
                         jac_val = 0.0
                         for M, mu_coeff in mu_det.items():
-                            jac_val += mu_coeff[0] * mu_coeff[1] * nu_coeffs[M]
+                            jac_val -= mu_coeff * nu_coeffs[M]
                         self._jac[mu, nu] = jac_val
 
             remove_redundancies = getattr(self, "_remove_redundancies", True)

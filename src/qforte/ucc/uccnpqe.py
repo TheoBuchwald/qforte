@@ -86,7 +86,7 @@ class UCCNPQE(UCCPQE):
 
         self._res_vec_evals = 0
         self._res_m_evals = 0
-        # list: tuple(excited determinant: (sign, phase_factor))
+        # list: tuple(excited determinant: phase_factor)
         self._excited_dets = []
 
         self._n_classical_params = 0
@@ -220,7 +220,7 @@ class UCCNPQE(UCCPQE):
                     qc_temp.apply_operator(sq_op.jw_transform(self._qubit_excitations))
 
                 for I, phase_factor in qc_temp.get_refs():
-                    excited_sr_det[I] = (1, phase_factor)
+                    excited_sr_det[I] = phase_factor
 
                 self._excited_dets.append(excited_sr_det)
         else:
@@ -296,7 +296,7 @@ class UCCNPQE(UCCPQE):
                     I = excited_det.index()
                     phase_factor = qc_temp.get_coeff_vec()[I]
 
-                    excited_sr_det[I] = (sign, phase_factor)
+                    excited_sr_det[I] = phase_factor
 
                 # For multi-reference states this is equivalent to a destroyed reference
                 if destroyed_mr == refs:
@@ -335,7 +335,7 @@ class UCCNPQE(UCCPQE):
             res_m = 0.0
 
             for J, exc_det in excited_sr_dets.items():
-                res_m += coeffs[J] * exc_det[1]
+                res_m += coeffs[J] * exc_det
 
             if np.imag(res_m) != 0.0:
                 raise ValueError(

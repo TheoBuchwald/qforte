@@ -83,10 +83,10 @@ class UCCVQE(UCC, VQE):
         pass
 
     def fill_commutator_pool(self):
-        print("\n\n==> Building commutator pool for gradient measurement.")
+        print("\n\n==> Building commutator pool for gradient measurement.", flush=True)
         self._commutator_pool = self._pool_obj.get_qubit_op_pool()
         self._commutator_pool.join_as_commutator(self._qb_ham)
-        print("==> Commutator pool construction complete.")
+        print("==> Commutator pool construction complete.", flush=True)
 
     def measure_operators(self, operators, Ucirc, idxs=[]):
         """
