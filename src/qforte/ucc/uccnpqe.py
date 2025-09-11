@@ -251,11 +251,9 @@ class UCCNPQE(UCCPQE):
                     if ref[temp_idx]:  # if temp_idx is an occupied idx
                         sq_creators = sq_op.terms()[0][1]
                         sq_annihilators = sq_op.terms()[0][2]
-                        sign = 1
                     else:
                         sq_creators = sq_op.terms()[0][2]
                         sq_annihilators = sq_op.terms()[0][1]
-                        sign = -1
 
                     # 2. Get the bit representation of the sq_ex_op acting on the reference.
                     # We determine the projective condition for this amplitude by zero'ing this residual.
